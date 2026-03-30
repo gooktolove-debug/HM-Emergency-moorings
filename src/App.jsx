@@ -1,24 +1,38 @@
+
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 
 delete L.Icon.Default.prototype._getIconUrl
+
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconRetinaUrl:
+    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-const makeIcon = (status, isHighlighted = false) =>
-  new L.DivIcon({
+const makeIcon = (
+  status,
+  isHighlighted = false,
+  availabilityClass = 'normal'
+) => {
+  const backgroundColor =
+    status === 'occupied'
+      ? '#dc2626' // red
+      : availabilityClass === 'orange'
+      ? '#f97316' // orange
+      : '#16a34a' // green
+
+  return new L.DivIcon({
     className: '',
     html: `
       <div style="
         width: ${isHighlighted ? '24px' : '18px'};
         height: ${isHighlighted ? '24px' : '18px'};
         border-radius: 999px;
-        background: ${status === 'occupied' ? '#dc2626' : '#16a34a'};
+        background: ${backgroundColor};
         border: 3px solid white;
         box-shadow: 0 2px 8px rgba(0,0,0,0.28);
         outline: ${isHighlighted ? '3px solid #f59e0b' : 'none'};
@@ -27,6 +41,7 @@ const makeIcon = (status, isHighlighted = false) =>
     iconSize: [isHighlighted ? 24 : 18, isHighlighted ? 24 : 18],
     iconAnchor: [isHighlighted ? 12 : 9, isHighlighted ? 12 : 9],
   })
+}
 
 function MapClickHandler() {
   useMapEvents({
@@ -34,6 +49,7 @@ function MapClickHandler() {
       // Disabled in production mode
     },
   })
+
   return null
 }
 
@@ -67,21 +83,18 @@ function LeafletMap({
   userLocation,
   mapHeight,
 }) {
+  const defaultCenter = [-36.85, 174.76]
+
   return (
     <MapContainer
-      center={[-36.8485, 174.7633]}
-      zoom={12}
-      style={{
-        height: mapHeight,
-        width: '100%',
-        borderRadius: '16px',
-        overflow: 'hidden',
-        border: '1px solid #dbe3ec',
-      }}
+      center={defaultCenter}
+      zoom={11}
+      style={{ height: mapHeight, width: '100%', borderRadius: '16px' }}
+      scrollWheelZoom
     >
       <TileLayer
         attribution="&copy; OpenStreetMap contributors"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
       <MapClickHandler />
@@ -95,13 +108,17 @@ function LeafletMap({
 
           return (
             <Marker
-              key={pin.id}
-              position={[Number(pin.lat), Number(pin.lng)]}
-              icon={makeIcon(pin.status, isHighlighted)}
-              eventHandlers={{
-                click: () => onSelectPin(pin.id),
-              }}
-            />
+  key={`${pin.id}-${pin.status}-${pin.availability_class ?? 'normal'}-${isHighlighted}`}
+  position={[Number(pin.lat), Number(pin.lng)]}
+  icon={makeIcon(
+    pin.status,
+    isHighlighted,
+    pin.availability_class ?? 'normal'
+  )}
+  eventHandlers={{
+    click: () => onSelectPin(pin.id),
+  }}
+/>
           )
         })}
     </MapContainer>
@@ -132,27 +149,23 @@ function HistoryItem({ item }) {
   return (
     <div
       style={{
+        padding: '10px 12px',
         border: '1px solid #e5e7eb',
-        borderRadius: '12px',
-        padding: '10px',
+        borderRadius: '10px',
+        marginBottom: '8px',
         background: 'white',
       }}
     >
-      <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
         {item.changed_at ? new Date(item.changed_at).toLocaleString() : ''}
       </div>
-
       <div style={{ fontWeight: 600, marginBottom: '4px' }}>
         {item.old_status || '-'} → {item.new_status}
       </div>
-
-      <div style={{ fontSize: '13px', color: '#444', marginBottom: '4px' }}>
+      <div style={{ fontSize: '14px', marginBottom: '4px' }}>
         Vessel: {item.vessel_name || 'None'}
       </div>
-
-      <div style={{ fontSize: '13px', color: '#444' }}>
-        Note: {item.note || '-'}
-      </div>
+      <div style={{ fontSize: '14px' }}>Note: {item.note || '-'}</div>
     </div>
   )
 }
@@ -164,15 +177,12 @@ export default function App() {
   const [selectedPinId, setSelectedPinId] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-
   const [editStatus, setEditStatus] = useState('available')
   const [editVesselName, setEditVesselName] = useState('')
   const [editNote, setEditNote] = useState('')
-
   const [userLocation, setUserLocation] = useState(null)
   const [locationError, setLocationError] = useState('')
   const [locating, setLocating] = useState(false)
-
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
 
   useEffect(() => {
@@ -194,13 +204,17 @@ export default function App() {
     ] = await Promise.all([
       supabase.from('pins').select('*').order('mooring_code', { ascending: true }),
       supabase.from('photos').select('*').order('created_at', { ascending: false }),
-      supabase.from('status_logs').select('*').order('changed_at', { ascending: false }),
+      supabase
+        .from('status_logs')
+        .select('*')
+        .order('changed_at', { ascending: false }),
     ])
 
     if (pinsError) {
       alert('Failed to load moorings: ' + pinsError.message)
     } else {
       setPins(pinsData || [])
+
       if (pinsData && pinsData.length > 0) {
         const currentSelected =
           pinsData.find((pin) => pin.id === selectedPinId) || pinsData[0]
@@ -253,9 +267,7 @@ export default function App() {
     return pins
       .filter(
         (pin) =>
-          pin.status === 'available' &&
-          pin.lat != null &&
-          pin.lng != null
+          pin.status === 'available' && pin.lat != null && pin.lng != null
       )
       .map((pin) => ({
         ...pin,
@@ -277,8 +289,8 @@ export default function App() {
   async function saveStatusChange(newStatus, vesselName, note) {
     if (!selectedPin) return false
 
-    const oldStatus = selectedPin.status || 'available'
-    const vesselNameToSave = newStatus === 'available' ? null : vesselName || null
+    const vesselNameToSave =
+      newStatus === 'available' ? null : vesselName || null
 
     const { error: updateError } = await supabase
       .from('pins')
@@ -321,10 +333,7 @@ export default function App() {
     )
     if (vesselName === null) return
 
-    const note = window.prompt(
-      'Enter a note (optional).',
-      editNote || ''
-    )
+    const note = window.prompt('Enter a note (optional).', editNote || '')
     if (note === null) return
 
     const ok = await saveStatusChange('occupied', vesselName.trim(), note.trim())
@@ -450,25 +459,34 @@ export default function App() {
   const DetailCard = (
     <div
       style={{
-        background: 'white',
+        background: '#f9fafb',
+        border: '1px solid #e5e7eb',
         borderRadius: '16px',
         padding: '16px',
-        border: '1px solid #e5e7eb',
-        marginTop: isMobile ? '12px' : '0',
       }}
     >
       {selectedPin ? (
         <>
-          <div style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '8px' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '8px' }}>
             {selectedPin.mooring_code || 'NO-CODE'} - {selectedPin.title}
+          </h3>
+
+          <div style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
+            lat {Number(selectedPin.lat).toFixed(5)} / lng{' '}
+            {Number(selectedPin.lng).toFixed(5)}
           </div>
 
-          <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px' }}>
-            lat {Number(selectedPin.lat).toFixed(5)} / lng {Number(selectedPin.lng).toFixed(5)}
+          <div style={{ fontSize: '14px', marginBottom: '8px' }}>
+            <strong>Status:</strong> {selectedPin.status}
           </div>
 
-          <div style={{ fontSize: '13px', color: '#666', marginBottom: '14px' }}>
-            Last updated:{' '}
+          <div style={{ fontSize: '14px', marginBottom: '8px' }}>
+            <strong>Availability class:</strong>{' '}
+            {selectedPin.availability_class || 'normal'}
+          </div>
+
+          <div style={{ fontSize: '14px', marginBottom: '16px' }}>
+            <strong>Last updated:</strong>{' '}
             {selectedPin.last_updated_at
               ? new Date(selectedPin.last_updated_at).toLocaleString()
               : '-'}
@@ -476,23 +494,22 @@ export default function App() {
 
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+              display: 'flex',
               gap: '8px',
-              marginBottom: '14px',
+              flexWrap: 'wrap',
+              marginBottom: '16px',
             }}
           >
             <button
               onClick={handleQuickOccupied}
               style={{
-                padding: isMobile ? '14px 12px' : '12px 14px',
+                padding: '10px 12px',
                 borderRadius: '10px',
                 border: 'none',
                 background: '#dc2626',
                 color: 'white',
                 cursor: 'pointer',
-                fontWeight: 'bold',
-                fontSize: isMobile ? '15px' : '14px',
+                fontWeight: 600,
               }}
             >
               Mark Occupied
@@ -501,398 +518,157 @@ export default function App() {
             <button
               onClick={handleQuickAvailable}
               style={{
-                padding: isMobile ? '14px 12px' : '12px 14px',
+                padding: '10px 12px',
                 borderRadius: '10px',
                 border: 'none',
                 background: '#16a34a',
                 color: 'white',
                 cursor: 'pointer',
-                fontWeight: 'bold',
-                fontSize: isMobile ? '15px' : '14px',
+                fontWeight: 600,
               }}
             >
               Mark Available
             </button>
           </div>
 
-          <div
+          <h4 style={{ marginBottom: '12px' }}>Detailed Update</h4>
+
+          <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>
+            Status
+          </label>
+          <select
+            value={editStatus}
+            onChange={(e) => setEditStatus(e.target.value)}
             style={{
-              background: '#f8fafc',
-              border: '1px solid #e5e7eb',
-              borderRadius: '12px',
-              padding: '12px',
+              width: '100%',
+              padding: isMobile ? '12px' : '10px',
+              borderRadius: '10px',
+              border: '1px solid #d1d5db',
               marginBottom: '12px',
             }}
           >
-            <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>
-              Detailed Update
-            </div>
+            <option value="available">available</option>
+            <option value="occupied">occupied</option>
+          </select>
 
-            <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', fontWeight: 'bold' }}>
-              Status
-            </label>
-            <select
-              value={editStatus}
-              onChange={(e) => setEditStatus(e.target.value)}
-              style={{
-                width: '100%',
-                padding: isMobile ? '12px' : '10px',
-                borderRadius: '10px',
-                border: '1px solid #d1d5db',
-                marginBottom: '12px',
-              }}
-            >
-              <option value="available">available</option>
-              <option value="occupied">occupied</option>
-            </select>
-
-            <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', fontWeight: 'bold' }}>
-              Current Vessel Name
-            </label>
-            <input
-              value={editVesselName}
-              onChange={(e) => setEditVesselName(e.target.value)}
-              placeholder="e.g. MV Southern Star"
-              style={{
-                width: '100%',
-                padding: isMobile ? '12px' : '10px',
-                borderRadius: '10px',
-                border: '1px solid #d1d5db',
-                marginBottom: '12px',
-                boxSizing: 'border-box',
-              }}
-            />
-
-            <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', fontWeight: 'bold' }}>
-              Note
-            </label>
-            <textarea
-              value={editNote}
-              onChange={(e) => setEditNote(e.target.value)}
-              placeholder="Enter a note"
-              style={{
-                width: '100%',
-                minHeight: '90px',
-                padding: isMobile ? '12px' : '10px',
-                borderRadius: '10px',
-                border: '1px solid #d1d5db',
-                marginBottom: '12px',
-                boxSizing: 'border-box',
-                resize: 'vertical',
-              }}
-            />
-
-            <button
-              onClick={handleDetailedUpdate}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: 'none',
-                background: '#111827',
-                color: 'white',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              Save Detailed Update
-            </button>
-          </div>
-
-          <div
+          <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>
+            Current Vessel Name
+          </label>
+          <input
+            value={editVesselName}
+            onChange={(e) => setEditVesselName(e.target.value)}
+            placeholder="e.g. MV Southern Star"
             style={{
-              background: '#f8fafc',
-              border: '1px solid #e5e7eb',
-              borderRadius: '12px',
-              padding: '12px',
+              width: '100%',
+              padding: isMobile ? '12px' : '10px',
+              borderRadius: '10px',
+              border: '1px solid #d1d5db',
               marginBottom: '12px',
+              boxSizing: 'border-box',
             }}
-          >
-            <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>
-              Photos
-            </div>
-
-            <label
-              style={{
-                display: 'inline-block',
-                marginBottom: '12px',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                background: '#2563eb',
-                color: 'white',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
-              <input
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handlePhotoUpload}
-                disabled={uploadingPhoto}
-              />
-            </label>
-
-            {selectedPhotos.length === 0 ? (
-              <div style={{ fontSize: '13px', color: '#666' }}>No photos uploaded yet.</div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                {selectedPhotos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      background: 'white',
-                    }}
-                  >
-                    <img
-                      src={photo.file_path}
-                      alt="Mooring"
-                      style={{
-                        width: '100%',
-                        height: '120px',
-                        objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                    <div style={{ padding: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>
-                        {photo.created_at
-                          ? new Date(photo.created_at).toLocaleString()
-                          : ''}
-                      </div>
-                      <button
-                        onClick={() => handleDeletePhoto(photo)}
-                        style={{
-                          width: '100%',
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          border: '1px solid #fca5a5',
-                          background: 'white',
-                          color: '#b91c1c',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                        }}
-                      >
-                        Delete Photo
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              background: '#f8fafc',
-              border: '1px solid #e5e7eb',
-              borderRadius: '12px',
-              padding: '12px',
-            }}
-          >
-            <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>
-              Status History
-            </div>
-
-            {selectedLogs.length === 0 ? (
-              <div style={{ fontSize: '13px', color: '#666' }}>No status history yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {selectedLogs.map((item) => (
-                  <HistoryItem key={item.id} item={item} />
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div style={{ color: '#666' }}>Select a mooring to view details.</div>
-      )}
-    </div>
-  )
-
-  return (
-    <div
-      style={{
-        padding: isMobile ? '12px' : '16px',
-        fontFamily: 'sans-serif',
-        background: '#f8fafc',
-        minHeight: '100vh',
-      }}
-    >
-      <h1
-        style={{
-          marginBottom: '8px',
-          fontSize: isMobile ? '24px' : '28px',
-          lineHeight: 1.2,
-        }}
-      >
-        Emergency Mooring Board
-      </h1>
-
-      <p style={{ marginTop: 0, color: '#555', fontSize: isMobile ? '13px' : '14px' }}>
-        Green = Available / Red = Occupied / Blue = My Location / Orange outline = Nearest available moorings
-      </p>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 380px',
-          gap: '16px',
-          alignItems: 'start',
-        }}
-      >
-        <div>
-          <div
-            style={{
-              background: 'white',
-              border: '1px solid #e5e7eb',
-              borderRadius: '16px',
-              padding: '12px',
-              marginBottom: '12px',
-            }}
-          >
-            <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-              Nearest Available Moorings
-            </div>
-
-            <button
-              onClick={getCurrentLocation}
-              style={{
-                width: isMobile ? '100%' : 'auto',
-                padding: isMobile ? '12px 14px' : '10px 14px',
-                borderRadius: '10px',
-                border: 'none',
-                background: '#2563eb',
-                color: 'white',
-                cursor: 'pointer',
-                marginBottom: '10px',
-                fontSize: isMobile ? '15px' : '14px',
-                fontWeight: 600,
-              }}
-            >
-              {locating ? 'Getting location...' : 'Use my current location'}
-            </button>
-
-            {locationError && (
-              <div style={{ fontSize: '13px', color: '#b91c1c', marginBottom: '10px' }}>
-                {locationError}
-              </div>
-            )}
-
-            {!userLocation ? (
-              <div style={{ fontSize: '13px', color: '#666' }}>
-                Allow location access to see the 3 nearest available moorings.
-              </div>
-            ) : nearestAvailable.length === 0 ? (
-              <div style={{ fontSize: '13px', color: '#666' }}>
-                There are currently no available moorings.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {nearestAvailable.map((pin, index) => (
-                  <button
-                    key={pin.id}
-                    onClick={() => setSelectedPinId(pin.id)}
-                    style={{
-                      textAlign: 'left',
-                      padding: '10px',
-                      borderRadius: '12px',
-                      border: '1px solid #e5e7eb',
-                      background: index === 0 ? '#eff6ff' : 'white',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>
-                      {index + 1}. {pin.mooring_code || 'NO-CODE'} - {pin.title}
-                    </div>
-                    <div style={{ fontSize: '13px', color: '#555', marginTop: '4px' }}>
-                      {pin.distanceKm.toFixed(2)} km away
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <LeafletMap
-            pins={pins}
-            selectedPinId={selectedPinId}
-            onSelectPin={setSelectedPinId}
-            highlightedPinIds={highlightedPinIds}
-            userLocation={userLocation}
-            mapHeight={mapHeight}
           />
 
-          {isMobile && DetailCard}
-
-          <div
+          <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>
+            Note
+          </label>
+          <textarea
+            value={editNote}
+            onChange={(e) => setEditNote(e.target.value)}
+            placeholder="Enter a note"
             style={{
-              background: 'white',
-              borderRadius: '16px',
-              padding: '16px',
-              border: '1px solid #e5e7eb',
-              marginTop: '12px',
+              width: '100%',
+              minHeight: '90px',
+              padding: isMobile ? '12px' : '10px',
+              borderRadius: '10px',
+              border: '1px solid #d1d5db',
+              marginBottom: '12px',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+            }}
+          />
+
+          <button
+            onClick={handleDetailedUpdate}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: 'none',
+              background: '#111827',
+              color: 'white',
+              cursor: 'pointer',
+              fontWeight: 600,
+              marginBottom: '20px',
             }}
           >
-            <h2 style={{ marginTop: 0, fontSize: '18px' }}>Mooring List</h2>
+            Save Detailed Update
+          </button>
 
-            {loading ? (
-              <p>Loading...</p>
-            ) : pins.length === 0 ? (
-              <p style={{ color: '#666' }}>No moorings found.</p>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px',
-                  maxHeight: isMobile ? 'none' : '260px',
-                  overflowY: isMobile ? 'visible' : 'auto',
-                }}
-              >
-                {pins.map((pin) => (
-                  <button
-                    key={pin.id}
-                    onClick={() => setSelectedPinId(pin.id)}
+          <h4 style={{ marginBottom: '12px' }}>Photos</h4>
+
+          <label
+            style={{
+              display: 'inline-block',
+              marginBottom: '12px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              background: '#2563eb',
+              color: 'white',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              style={{ display: 'none' }}
+            />
+          </label>
+
+          {selectedPhotos.length === 0 ? (
+            <p style={{ color: '#6b7280' }}>No photos uploaded yet.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '10px', marginBottom: '20px' }}>
+              {selectedPhotos.map((photo) => (
+                <div
+                  key={photo.id}
+                  style={{
+                    padding: '10px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    background: 'white',
+                  }}
+                >
+                  <img
+                    src={photo.file_path}
+                    alt="Mooring"
                     style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      borderRadius: '12px',
-                      border:
-                        selectedPinId === pin.id
-                          ? '1px solid #111827'
-                          : '1px solid #e5e7eb',
-                      background: selectedPinId === pin.id ? '#111827' : 'white',
-                      color: selectedPinId === pin.id ? 'white' : '#111',
-                      cursor: 'pointer',
+                      width: '100%',
+                      borderRadius: '10px',
+                      marginBottom: '8px',
+                    }}
+                  />
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: '#6b7280',
+                      marginBottom: '8px',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold' }}>
-                      {pin.mooring_code || 'NO-CODE'} - {pin.title}
-                    </div>
-                    <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.8 }}>
-                      Status: {pin.status}
-                    </div>
-                    <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.7 }}>
-                      {pin.current_vessel_name
-                        ? `Vessel: ${pin.current_vessel_name}`
-                        : 'No vessel attached'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {!isMobile && DetailCard}
-      </div>
-    </div>
-  )
-}
+                    {photo.created_at
+                      ? new Date(photo.created_at).toLocaleString()
+                      : ''}
+                  </div>
+                  <button
+                    onClick={() => handleDeletePhoto(photo)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #fca5a5',
+                      background: 'white',
+                      color: '#b91c1c',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      font
