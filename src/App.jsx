@@ -1,11 +1,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
+// Fix default Leaflet icon paths
 delete L.Icon.Default.prototype._getIconUrl
-
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -13,6 +14,12 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
+/**
+ * Marker color rules
+ * occupied -> red
+ * available + availability_class=orange -> orange
+ * available + normal -> green
+ */
 const makeIcon = (
   status,
   isHighlighted = false,
@@ -46,10 +53,9 @@ const makeIcon = (
 function MapClickHandler() {
   useMapEvents({
     click() {
-      // Disabled in production mode
+      // disabled
     },
   })
-
   return null
 }
 
@@ -108,17 +114,32 @@ function LeafletMap({
 
           return (
             <Marker
-  key={`${pin.id}-${pin.status}-${pin.availability_class ?? 'normal'}-${isHighlighted}`}
-  position={[Number(pin.lat), Number(pin.lng)]}
-  icon={makeIcon(
-    pin.status,
-    isHighlighted,
-    pin.availability_class ?? 'normal'
-  )}
-  eventHandlers={{
-    click: () => onSelectPin(pin.id),
-  }}
-/>
+              key={`${pin.id}-${pin.status}-${pin.availability_class ?? 'normal'}-${isHighlighted}`}
+              position={[Number(pin.lat), Number(pin.lng)]}
+              icon={makeIcon(
+                pin.status,
+                isHighlighted,
+                pin.availability_class ?? 'normal'
+              )}
+              eventHandlers={{
+                click: () => onSelectPin(pin.id),
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: '180px' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                    {pin.mooring_code || 'NO-CODE'} - {pin.title || 'Untitled'}
+                  </div>
+                  <div>Status: {pin.status || '-'}</div>
+                  <div>
+                    Availability class: {pin.availability_class || 'normal'}
+                  </div>
+                  {pin.current_vessel_name ? (
+                    <div>Vessel: {pin.current_vessel_name}</div>
+                  ) : null}
+                </div>
+              </Popup>
+            </Marker>
           )
         })}
     </MapContainer>
@@ -204,20 +225,18 @@ export default function App() {
     ] = await Promise.all([
       supabase.from('pins').select('*').order('mooring_code', { ascending: true }),
       supabase.from('photos').select('*').order('created_at', { ascending: false }),
-      supabase
-        .from('status_logs')
-        .select('*')
-        .order('changed_at', { ascending: false }),
+      supabase.from('status_logs').select('*').order('changed_at', { ascending: false }),
     ])
 
     if (pinsError) {
       alert('Failed to load moorings: ' + pinsError.message)
     } else {
-      setPins(pinsData || [])
+      const nextPins = pinsData || []
+      setPins(nextPins)
 
-      if (pinsData && pinsData.length > 0) {
+      if (nextPins.length > 0) {
         const currentSelected =
-          pinsData.find((pin) => pin.id === selectedPinId) || pinsData[0]
+          nextPins.find((pin) => pin.id === selectedPinId) || nextPins[0]
         setSelectedPinId(currentSelected.id)
       }
     }
@@ -239,6 +258,7 @@ export default function App() {
 
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const selectedPin = useMemo(() => {
@@ -456,7 +476,7 @@ export default function App() {
     )
   }
 
-  const DetailCard = (
+  const detailCard = (
     <div
       style={{
         background: '#f9fafb',
@@ -468,12 +488,13 @@ export default function App() {
       {selectedPin ? (
         <>
           <h3 style={{ marginTop: 0, marginBottom: '8px' }}>
-            {selectedPin.mooring_code || 'NO-CODE'} - {selectedPin.title}
+            {selectedPin.mooring_code || 'NO-CODE'} -{' '}
+            {selectedPin.title || 'Untitled'}
           </h3>
 
           <div style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
-            lat {Number(selectedPin.lat).toFixed(5)} / lng{' '}
-            {Number(selectedPin.lng).toFixed(5)}
+            lat {Number(selectedPin.lat || 0).toFixed(5)} / lng{' '}
+            {Number(selectedPin.lng || 0).toFixed(5)}
           </div>
 
           <div style={{ fontSize: '14px', marginBottom: '8px' }}>
@@ -530,6 +551,21 @@ export default function App() {
               Mark Available
             </button>
           </div>
+
+          <button
+            onClick={loadData}
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid #d1d5db',
+              background: 'white',
+              cursor: 'pointer',
+              fontWeight: 600,
+              marginBottom: '16px',
+            }}
+          >
+            Refresh Moorings
+          </button>
 
           <h4 style={{ marginBottom: '12px' }}>Detailed Update</h4>
 
@@ -671,4 +707,224 @@ export default function App() {
                       color: '#b91c1c',
                       cursor: 'pointer',
                       fontSize: '12px',
-                      font
+                      fontWeight: 600,
+                    }}
+                  >
+                    Delete Photo
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h4 style={{ marginBottom: '12px' }}>Status History</h4>
+
+          {selectedLogs.length === 0 ? (
+            <p style={{ color: '#6b7280' }}>No status history yet.</p>
+          ) : (
+            <div>
+              {selectedLogs.map((item) => (
+                <HistoryItem key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <p>Select a mooring to view details.</p>
+      )}
+    </div>
+  )
+
+  return (
+    <div
+      style={{
+        padding: isMobile ? '16px' : '24px',
+        maxWidth: '1400px',
+        margin: '0 auto',
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}
+    >
+      <h2 style={{ marginTop: 0, marginBottom: '8px' }}>Emergency Mooring Board</h2>
+
+      <p style={{ color: '#4b5563', marginTop: 0, marginBottom: '16px' }}>
+        Green = Available / Red = Occupied / Orange = Special Available / Blue =
+        My Location / Orange outline = Nearest available moorings
+      </p>
+
+      <button
+        onClick={loadData}
+        style={{
+          padding: '10px 12px',
+          borderRadius: '10px',
+          border: '1px solid #d1d5db',
+          background: 'white',
+          cursor: 'pointer',
+          fontWeight: 600,
+          marginBottom: '16px',
+        }}
+      >
+        Refresh Moorings
+      </button>
+
+      <div
+        style={{
+          background: '#f9fafb',
+          border: '1px solid #e5e7eb',
+          borderRadius: '16px',
+          padding: '16px',
+          marginBottom: '20px',
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>Nearest Available Moorings</h3>
+
+        <button
+          onClick={getCurrentLocation}
+          style={{
+            padding: '10px 12px',
+            borderRadius: '10px',
+            border: 'none',
+            background: '#2563eb',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 600,
+            marginBottom: '10px',
+          }}
+        >
+          {locating ? 'Getting location...' : 'Use my current location'}
+        </button>
+
+        {locationError && (
+          <div style={{ color: '#b91c1c', marginBottom: '8px' }}>
+            {locationError}
+          </div>
+        )}
+
+        {!userLocation ? (
+          <div style={{ color: '#6b7280' }}>
+            Allow location access to see the 3 nearest available moorings.
+          </div>
+        ) : nearestAvailable.length === 0 ? (
+          <div style={{ color: '#6b7280' }}>
+            There are currently no available moorings.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {nearestAvailable.map((pin, index) => (
+              <button
+                key={pin.id}
+                onClick={() => setSelectedPinId(pin.id)}
+                style={{
+                  textAlign: 'left',
+                  padding: '10px',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e7eb',
+                  background: index === 0 ? '#eff6ff' : 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>
+                  {index + 1}. {pin.mooring_code || 'NO-CODE'} -{' '}
+                  {pin.title || 'Untitled'}
+                </div>
+                <div style={{ fontSize: '14px', color: '#4b5563' }}>
+                  {pin.distanceKm.toFixed(2)} km away
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {isMobile && (
+        <div style={{ marginBottom: '20px' }}>
+          <LeafletMap
+            pins={pins}
+            selectedPinId={selectedPinId}
+            onSelectPin={setSelectedPinId}
+            highlightedPinIds={highlightedPinIds}
+            userLocation={userLocation}
+            mapHeight={mapHeight}
+          />
+        </div>
+      )}
+
+      {isMobile && <div style={{ marginBottom: '20px' }}>{detailCard}</div>}
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '340px 1fr 360px',
+          gap: '20px',
+          alignItems: 'start',
+        }}
+      >
+        <div
+          style={{
+            background: '#f9fafb',
+            border: '1px solid #e5e7eb',
+            borderRadius: '16px',
+            padding: '16px',
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Mooring List</h3>
+
+          {loading ? (
+            <div>Loading...</div>
+          ) : pins.length === 0 ? (
+            <div>No moorings found.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {pins.map((pin) => (
+                <button
+                  key={pin.id}
+                  onClick={() => setSelectedPinId(pin.id)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border:
+                      selectedPinId === pin.id
+                        ? '1px solid #111827'
+                        : '1px solid #e5e7eb',
+                    background: selectedPinId === pin.id ? '#111827' : 'white',
+                    color: selectedPinId === pin.id ? 'white' : '#111',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>
+                    {pin.mooring_code || 'NO-CODE'} - {pin.title || 'Untitled'}
+                  </div>
+                  <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                    Status: {pin.status}
+                  </div>
+                  <div style={{ fontSize: '13px', marginTop: '4px' }}>
+                    Availability class: {pin.availability_class || 'normal'}
+                  </div>
+                  <div style={{ fontSize: '13px', marginTop: '4px', opacity: 0.85 }}>
+                    {pin.current_vessel_name
+                      ? `Vessel: ${pin.current_vessel_name}`
+                      : 'No vessel attached'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!isMobile && (
+          <LeafletMap
+            pins={pins}
+            selectedPinId={selectedPinId}
+            onSelectPin={setSelectedPinId}
+            highlightedPinIds={highlightedPinIds}
+            userLocation={userLocation}
+            mapHeight={mapHeight}
+          />
+        )}
+
+        {!isMobile && detailCard}
+      </div>
+    </div>
+  )
+}
