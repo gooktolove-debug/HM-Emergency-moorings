@@ -500,6 +500,11 @@ export default function App() {
             {Number(selectedPin.lng || 0).toFixed(5)}
           </div>
 
+          <div style={{ fontSize: '0.9em', color: '#374151' }}>
+            {toDegreeMinutes(Number(selectedPin.lat), true)} /{' '}
+            {toDegreeMinutes(Number(selectedPin.lng), false)}
+          </div>
+
           <div style={{ fontSize: '14px', marginBottom: '8px' }}>
             <strong>Status:</strong> {selectedPin.status}
           </div>
