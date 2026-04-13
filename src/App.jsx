@@ -496,8 +496,8 @@ export default function App() {
           </h3>
 
           <div style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
-            lat {Number(selectedPin.lat || 0).toFixed(5)} / lng{' '}
-            {Number(selectedPin.lng || 0).toFixed(5)}
+            lat {Number(selectedPin.lat).toFixed(5)} / lng{' '}
+            {Number(selectedPin.lng).toFixed(5)}
           </div>
 
           <div style={{ fontSize: '0.9em', color: '#374151' }}>
