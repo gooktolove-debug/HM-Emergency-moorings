@@ -496,14 +496,20 @@ export default function App() {
           </h3>
 
           <div style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
-            lat {Number(selectedPin.lat).toFixed(5)} / lng{' '}
-            {Number(selectedPin.lng).toFixed(5)}
-          </div>
+  lat {safeFixed(selectedPin.lat)} / lng {safeFixed(selectedPin.lng)}
+</div>
 
-          <div style={{ fontSize: '0.9em', color: '#374151' }}>
-            {toDegreeMinutes(Number(selectedPin.lat), true)} /{' '}
-            {toDegreeMinutes(Number(selectedPin.lng), false)}
-          </div>
+<div style={{ fontSize: '0.9em', color: '#374151' }}>
+  {Number.isFinite(Number(selectedPin.lat)) &&
+   Number.isFinite(Number(selectedPin.lng))
+    ? (
+      <>
+        {toDegreeMinutes(Number(selectedPin.lat), true)} /{' '}
+        {toDegreeMinutes(Number(selectedPin.lng), false)}
+      </>
+    )
+    : '-'}
+</div>
 
           <div style={{ fontSize: '14px', marginBottom: '8px' }}>
             <strong>Status:</strong> {selectedPin.status}
