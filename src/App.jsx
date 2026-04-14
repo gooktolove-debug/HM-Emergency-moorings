@@ -166,6 +166,36 @@ function getDistanceKm(lat1, lng1, lat2, lng2) {
   return R * c
 }
 
+
+function safeNumber(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function safeFixed(value, digits = 5) {
+  const n = safeNumber(value)
+  return n === null ? '-' : n.toFixed(digits)
+}
+
+function toDegreeMinutes(value, isLat = true) {
+  const n = safeNumber(value)
+  if (n === null) return '-'
+
+  const abs = Math.abs(n)
+  const degrees = Math.floor(abs)
+  const minutes = ((abs - degrees) * 60).toFixed(3)
+
+  const direction = isLat
+    ? n >= 0
+      ? 'N'
+      : 'S'
+    : n >= 0
+    ? 'E'
+    : 'W'
+
+  return `${degrees}° ${minutes}' ${direction}`
+}
+
 function HistoryItem({ item }) {
   return (
     <div
@@ -495,12 +525,13 @@ export default function App() {
             {selectedPin.title || 'Untitled'}
           </h3>
 
-          <div style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
+          <div style={{ fontSize: '14px', color: '#4b5563', marginBottom: '4px' }}>
             lat {safeFixed(selectedPin.lat)} / lng {safeFixed(selectedPin.lng)}
           </div>
-          
-          <div style={{ fontSize: '0.9em', color: '#374151', marginBottom: '8px' }}>
-            {toDegreeMinutes(selectedPin.lat, true)} / {toDegreeMinutes(selectedPin.lng, false)}
+
+          <div style={{ fontSize: '13px', color: '#374151', marginBottom: '8px' }}>
+            {toDegreeMinutes(selectedPin.lat, true)} /{' '}
+            {toDegreeMinutes(selectedPin.lng, false)}
           </div>
 
           <div style={{ fontSize: '14px', marginBottom: '8px' }}>
