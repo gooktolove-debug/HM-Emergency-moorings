@@ -825,8 +825,6 @@ export default function App() {
       <div style={{ textAlign: 'center', marginBottom: '24px' }}>
         <h1 style={{ marginBottom: '8px' }}>Emergency Mooring Board</h1>
         <div style={{ color: '#475569', marginBottom: '16px' }}>
-          Green = Available / Red = Occupied / Orange = Special Available / Blue = My Location /
-          Orange outline = Nearest available moorings
         </div>
         <button onClick={loadData} style={buttonBase}>
           Refresh Moorings
