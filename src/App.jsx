@@ -345,7 +345,7 @@ export default function App() {
   const [selectedPinId, setSelectedPinId] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [editStatus, setEditStatus] = useState('available')
+  const [editStatus, setEditStatus] = useState('')
   const [editVesselName, setEditVesselName] = useState('')
   const [editNote, setEditNote] = useState('')
   const [userLocation, setUserLocation] = useState(null)
@@ -381,9 +381,11 @@ export default function App() {
       const nextPins = pinsData || []
       setPins(nextPins)
 
-      if (nextPins.length > 0) {
-        const currentSelected = nextPins.find((pin) => pin.id === selectedPinId) || nextPins[0]
-        setSelectedPinId(currentSelected.id)
+      // Do not automatically select the first mooring on initial page load.
+      // If a mooring is already selected, keep it selected after refresh; otherwise leave details blank.
+      if (selectedPinId) {
+        const currentSelected = nextPins.find((pin) => pin.id === selectedPinId)
+        setSelectedPinId(currentSelected ? currentSelected.id : '')
       }
     }
 
@@ -420,12 +422,12 @@ export default function App() {
   }, [logs, selectedPinId])
 
   useEffect(() => {
-    if (selectedPin) {
-      setEditStatus(selectedPin.status || 'available')
-      setEditVesselName(selectedPin.current_vessel_name || '')
-      setEditNote(selectedPin.note || '')
-    }
-  }, [selectedPin])
+    // Keep the Detailed Update form blank when a mooring is selected.
+    // This avoids showing the last saved vessel/note as if it were a cached draft.
+    setEditStatus('')
+    setEditVesselName('')
+    setEditNote('')
+  }, [selectedPinId])
 
   const nearestAvailable = useMemo(() => {
     if (!userLocation) return []
@@ -523,6 +525,11 @@ export default function App() {
   }
 
   async function handleDetailedUpdate() {
+    if (!editStatus) {
+      alert('Please select a status before saving the detailed update.')
+      return
+    }
+
     const ok = await saveStatusChange(editStatus, editVesselName.trim(), editNote.trim())
     if (ok) alert('Detailed update saved.')
   }
@@ -730,6 +737,9 @@ export default function App() {
               boxSizing: 'border-box',
             }}
           >
+            <option value="" disabled>
+              Select status
+            </option>
             <option value="available">available</option>
             <option value="occupied">occupied</option>
           </select>
