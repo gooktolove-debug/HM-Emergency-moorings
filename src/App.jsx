@@ -293,8 +293,8 @@ function MooringList({ pins, selectedPinId, setSelectedPinId, loading, isMobile 
         border: '1px solid #e5e7eb',
         borderRadius: '18px',
         padding: isMobile ? '18px' : '20px',
-        maxHeight: isMobile ? 'none' : '360px',
-        overflow: 'auto',
+        maxHeight: isMobile ? '420px' : '360px',
+        overflowY: 'auto',
         boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
       }}
     >
