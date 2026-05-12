@@ -348,6 +348,7 @@ export default function App() {
   const [editStatus, setEditStatus] = useState('')
   const [editVesselName, setEditVesselName] = useState('')
   const [editNote, setEditNote] = useState('')
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
   const [locationError, setLocationError] = useState('')
   const [locating, setLocating] = useState(false)
@@ -427,6 +428,7 @@ export default function App() {
     setEditStatus('')
     setEditVesselName('')
     setEditNote('')
+    setShowHistoryModal(false)
   }, [selectedPinId])
 
   const nearestAvailable = useMemo(() => {
@@ -860,10 +862,115 @@ export default function App() {
           {selectedLogs.length === 0 ? (
             <div style={{ color: '#64748b', fontSize: '14px' }}>No status history yet.</div>
           ) : (
-            <div style={{ display: 'grid', gap: '10px' }}>
-              {selectedLogs.map((item) => (
-                <HistoryItem key={item.id} item={item} />
-              ))}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb',
+                background: '#f8fafc',
+              }}
+            >
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ color: '#64748b', fontSize: '12px', fontWeight: 700 }}>
+                  Latest update
+                </div>
+                <div style={{ color: '#0f172a', fontSize: '14px', fontWeight: 800 }}>
+                  {selectedLogs[0].changed_at
+                    ? new Date(selectedLogs[0].changed_at).toLocaleString()
+                    : '-'}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(true)}
+                style={{
+                  ...buttonBase,
+                  padding: '9px 14px',
+                  background: '#111827',
+                  color: 'white',
+                  borderColor: '#111827',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                History
+              </button>
+            </div>
+          )}
+
+          {showHistoryModal && (
+            <div
+              onClick={() => setShowHistoryModal(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.55)',
+                zIndex: 2000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px',
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: 'min(520px, 100%)',
+                  maxHeight: '80vh',
+                  overflowY: 'auto',
+                  background: 'white',
+                  borderRadius: '18px',
+                  padding: '18px',
+                  boxShadow: '0 20px 50px rgba(15, 23, 42, 0.25)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    marginBottom: '14px',
+                  }}
+                >
+                  <h3 style={{ margin: 0, color: '#334155' }}>History</h3>
+                  <button
+                    onClick={() => setShowHistoryModal(false)}
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      background: 'white',
+                      color: '#0f172a',
+                      borderRadius: '999px',
+                      width: '34px',
+                      height: '34px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                    aria-label="Close history popup"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '12px' }}>
+                  Previous status updates for {selectedPin.mooring_code || 'NO-CODE'} -{' '}
+                  {selectedPin.title || 'Untitled'}
+                </div>
+
+                {selectedLogs.slice(1).length === 0 ? (
+                  <div style={{ color: '#64748b', fontSize: '14px' }}>
+                    No previous status history yet.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    {selectedLogs.slice(1).map((item) => (
+                      <HistoryItem key={item.id} item={item} />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </>
